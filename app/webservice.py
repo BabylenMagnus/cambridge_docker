@@ -4,6 +4,25 @@ import logging
 import requests
 from bs4 import BeautifulSoup
 
+import spacy
+from cefrpy import CEFRSpaCyAnalyzer, CEFRLevel, CEFRAnalyzer
+
+
+nlp = spacy.load("en_core_web_sm")
+
+ABBREVIATION_MAPPING = {
+    "'m": "am",
+    "'s": "is",
+    "'re": "are",
+    "'ve": "have",
+    "'d": "had",
+    "n't": "not",
+    "'ll": "will"
+}
+text_analyzer = CEFRSpaCyAnalyzer(abbreviation_mapping=ABBREVIATION_MAPPING)
+analyzer = CEFRAnalyzer()
+
+
 app = FastAPI()
 logging.getLogger().setLevel(logging.INFO)
 
@@ -129,8 +148,31 @@ def get_cambridge_english_russian(word):
     return data
 
 
-@app.post("/translate")
+@app.post("/translate_cambridge")
 def repeat_card(
         word: str = Query(..., description="Слово для перевода."),
 ):
     return get_cambridge_english_russian(word)
+
+
+@app.post("/text_cefr")
+def text_cefr(
+        text: str = Query(..., description="Текст для обработки слов"),
+):
+    doc = nlp(text)
+    tokens = text_analyzer.analize_doc(doc)
+    out_words = []
+    for token in tokens[:-1]:
+        word, pos, is_skipped, level, _, _ = token
+        if len(word) < 2:
+            continue
+        out_words.append((word, pos, CEFRLevel(round(level)) if level else None))
+    return out_words
+
+
+@app.post("/word_cefr")
+def word_cefr(
+        word: str = Query(..., description="Слово для cefr уровня."),
+):
+    average_level = analyzer.get_average_word_level_float(word)
+    return average_level
